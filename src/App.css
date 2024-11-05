@@ -1,0 +1,25 @@
+.App {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.toolbar {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.measurements {
+  margin-top: 1rem;
+  text-align: left;
+}
+
+ul {
+  list-style-type: none;
+  padding: 0;
+}
+
+li {
+  margin-bottom: 0.5rem;
+}
