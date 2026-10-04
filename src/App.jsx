@@ -4,7 +4,6 @@ import * as cornerstoneMath from 'cornerstone-math';
 import * as cornerstoneTools from 'cornerstone-tools';
 import Hammer from 'hammerjs';
 import dicomParser from 'dicom-parser';
-import CryptoJS from 'crypto-js';
 import './App.css';
 
 cornerstoneTools.external.cornerstone = cornerstone;
@@ -12,6 +11,51 @@ cornerstoneTools.external.Hammer = Hammer;
 cornerstoneTools.external.cornerstoneMath = cornerstoneMath;
 
 cornerstoneTools.init();
+
+// Exports are produced entirely in the browser. The plain export is the
+// default: these files carry clinical measurements, so they are written as
+// readable JSON and should be handled accordingly. The passphrase variant
+// derives its key from a passphrase supplied at export time, so no key is ever
+// part of the source or the shipped bundle.
+const ENCRYPTED_EXPORT_FORMAT = 'xray-markup-encrypted-v1';
+const PBKDF2_ITERATIONS = 250000;
+const textEncoder = new TextEncoder();
+
+const toBase64 = (bytes) => {
+  let binary = '';
+  bytes.forEach(byte => {
+    binary += String.fromCharCode(byte);
+  });
+  return window.btoa(binary);
+};
+
+const deriveExportKey = async (passphrase, salt) => {
+  const baseKey = await crypto.subtle.importKey(
+    'raw',
+    textEncoder.encode(passphrase),
+    'PBKDF2',
+    false,
+    ['deriveKey']
+  );
+
+  return crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt, iterations: PBKDF2_ITERATIONS, hash: 'SHA-256' },
+    baseKey,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt']
+  );
+};
+
+const downloadJson = (data, filename) => {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+};
 
 const App = () => {
   const [imageId, setImageId] = useState(null);
@@ -98,14 +142,39 @@ const App = () => {
   };
 
   const handleExportMeasurements = () => {
-    const measurementsJson = JSON.stringify(measurements);
-    const encryptedData = CryptoJS.AES.encrypt(measurementsJson, 'secret_key').toString();
-    const blob = new Blob([encryptedData], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'measurements.json';
-    a.click();
+    downloadJson(measurements, 'measurements.json');
+  };
+
+  const handleExportEncryptedMeasurements = async () => {
+    const passphrase = window.prompt(
+      'Enter a passphrase to protect this export. It is used to derive the key and is not stored by the app.'
+    );
+    if (passphrase === null) return;
+    if (!passphrase) {
+      window.alert('Export cancelled: a passphrase is required.');
+      return;
+    }
+
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const key = await deriveExportKey(passphrase, salt);
+    const ciphertext = await crypto.subtle.encrypt(
+      { name: 'AES-GCM', iv },
+      key,
+      textEncoder.encode(JSON.stringify(measurements))
+    );
+
+    downloadJson({
+      format: ENCRYPTED_EXPORT_FORMAT,
+      kdf: {
+        name: 'PBKDF2',
+        hash: 'SHA-256',
+        iterations: PBKDF2_ITERATIONS,
+        salt: toBase64(salt)
+      },
+      cipher: { name: 'AES-GCM', iv: toBase64(iv), keyLength: 256 },
+      ciphertext: toBase64(new Uint8Array(ciphertext))
+    }, 'measurements.enc.json');
   };
 
   return (
@@ -120,6 +189,7 @@ const App = () => {
       <div ref={imageRef} style={{ width: '512px', height: '512px' }}></div>
       <button onClick={handleSaveMeasurements}>Save Measurements</button>
       <button onClick={handleExportMeasurements}>Export Measurements</button>
+      <button onClick={handleExportEncryptedMeasurements}>Export with Passphrase</button>
       <div className="measurements">
         <h2>Measurements</h2>
         <ul>
