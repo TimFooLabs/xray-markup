@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "react": "^18.2.0",
-    "react-dom": "^18.2.0",
+    "react-dom": "^19.3.0",
     "cornerstone-core": "^2.6.1",
     "cornerstone-math": "^0.1.9",
     "cornerstone-tools": "^6.0.8",
@@ -20,7 +20,7 @@
   },
   "devDependencies": {
     "@types/react": "^18.0.28",
-    "@types/react-dom": "^18.0.11",
+    "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.1",
     "vite": "^8.3.2"
   },
